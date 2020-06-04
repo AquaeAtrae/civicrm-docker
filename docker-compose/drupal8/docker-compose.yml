@@ -1,0 +1,54 @@
+version: "3.6"
+services:
+  civicrm:
+    build: ../../5/drupal8/php7.3/.
+    hostname: drupal8
+    environment:
+      - BASE_URL=http://civicrm-drupal8.localhost
+      - CIVICRM_DB_HOST=mysql
+      - CIVICRM_DB_NAME=drupal8_civicrm
+      - CIVICRM_DB_PASS
+      - CIVICRM_DB_PORT=3306
+      - CIVICRM_DB_USER=drupal8
+      - DEBUG=ON
+      - DRUPAL_DB_HOST=mysql
+      - DRUPAL_DB_NAME=drupal8_drupal
+      - DRUPAL_DB_PASS
+      - DRUPAL_DB_PORT=3306
+      - DRUPAL_DB_USER=drupal8
+      - PHP_DATE_TIMEZONE=Europe/London
+      - PROJECT_NAME=drupal8
+      - SMTP_HOST=maildev
+      - SMTP_MAILDOMAIN=drupal8.localhost
+      - ALLIES_POSTCODER_KEY
+    volumes:
+      - ./src:/var/www/html
+      - ./bin:/var/www/bin
+      - files:/var/www/html/sites/default/files
+      - ./state:/state
+      - ./.bash_history:/home/civicrm/.bash_history
+      - ./postLoad:/home/civicrm/postLoad
+    networks:
+      - drupal8
+      - traefik
+      - mysql
+    restart: always
+  mail:
+    image: djfarrelly/maildev
+    restart: always
+    networks:
+      drupal8:
+        aliases:
+          - maildev
+      traefik:
+    labels:
+      - "traefik.http.services.maildev-drupal8.loadbalancer.server.port=80"
+volumes:
+  files:
+networks:
+  drupal8:
+    name: drupal8_default
+  traefik:
+    name: traefik
+  mysql:
+    name: civicrm-mysql

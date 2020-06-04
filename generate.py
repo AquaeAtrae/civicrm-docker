@@ -85,6 +85,7 @@ for combo in combos.values():
     cms_settings_file_lookup = {
         "backdrop": "settings.php",
         "drupal": "settings.php",
+        "drupal8": "settings.php",
         "wordpress": "wp-config.php",
     }
     cms_settings_file = cms_settings_file_lookup[cms]

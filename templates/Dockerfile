@@ -29,6 +29,7 @@ RUN apt-get update \
   mariadb-client \
   unzip \
   wget \
+  git \
   && rm -r /var/lib/apt/lists/*
 
 # CiviCRM requires the following PHP extensions (some of which are already
@@ -86,9 +87,9 @@ RUN EXPECTED_SIGNATURE="$(curl https://composer.github.io/installer.sig)" \
 
 # Create civicrm user
 
-RUN useradd civicrm --home-dir /home/civicrm --create-home 
+RUN useradd civicrm --home-dir /home/civicrm --create-home
 
-RUN chown -R civicrm:civicrm /var/www 
+RUN chown -R civicrm:civicrm /var/www
 
 ENV APACHE_RUN_USER=civicrm
 
