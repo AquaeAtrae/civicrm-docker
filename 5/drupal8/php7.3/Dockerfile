@@ -133,7 +133,7 @@ ENV PATH="/home/civicrm/.composer/vendor/bin:${PATH}"
 
 RUN cgr drush/drush:~8
 
-RUN mkdir /var/www/html/web/sites/default/files
+RUN mkdir -p /var/www/html/web/sites/default/files
 
 USER root
 
