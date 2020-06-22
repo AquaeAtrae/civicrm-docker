@@ -2,8 +2,8 @@
 global $civicrm_root, $civicrm_setting, $civicrm_paths;
 
 // CMS specific stuff
-define('CIVICRM_UF', 'Drupal');
-$civicrm_root = '/var/www/html/web/sites/all/modules/civicrm/';
+define('CIVICRM_UF', 'Drupal8');
+$civicrm_root = '/var/www/html/vendor/civicrm/civicrm-core/';
 define('CIVICRM_TEMPLATE_COMPILEDIR', '/var/www/html/web/sites/default/files/civicrm/templates_c/');
 
 // Constants set by env variables

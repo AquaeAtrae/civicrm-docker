@@ -137,11 +137,12 @@ RUN mkdir -p /var/www/html/web/sites/default/files
 
 USER root
 
-CMD touch /usr/local/bin/civicrm-docker-entrypoint
-
-COPY ./civicrm-docker-init ./civicrm-docker-dump ./civicrm-docker-install /usr/local/bin/
+COPY ./civicrm-docker-entrypoint ./civicrm-docker-init ./civicrm-docker-dump ./civicrm-docker-install /usr/local/bin/
 
 RUN chmod +x /usr/local/bin/civicrm-docker-entrypoint && \
    chmod +x /usr/local/bin/civicrm-docker-init && \
    chmod +x /usr/local/bin/civicrm-docker-dump && \
    chmod +x /usr/local/bin/civicrm-docker-install
+
+COPY --chown=civicrm:civicrm ./settings.php /usr/local/etc/civicrm
+COPY --chown=civicrm:civicrm ./civicrm.settings.php /usr/local/etc/civicrm
