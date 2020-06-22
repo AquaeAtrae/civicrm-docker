@@ -1,14 +1,31 @@
 <?php
 global $civicrm_root, $civicrm_setting, $civicrm_paths;
 
+$cms_root = '/var/www/html/web';
+$civicrm_files = "$cms_root/sites/default/files";
+$civicrm_root = '/var/www/html/vendor/civicrm/civicrm-core/';
+$civicrm_paths['cms.root'] = ['path' => $cms_root];
+$civicrm_paths['civicrm.files'] = ['path' => $civicrm_files];
+
 // CMS specific stuff
 define('CIVICRM_UF', 'Drupal8');
-$civicrm_root = '/var/www/html/vendor/civicrm/civicrm-core/';
-define('CIVICRM_TEMPLATE_COMPILEDIR', '/var/www/html/web/sites/default/files/civicrm/templates_c/');
+define('CIVICRM_TEMPLATE_COMPILEDIR', "$civicrm_files/civicrm/templates_c/");
 
 // Constants set by env variables
-define('CIVICRM_DSN', 'mysql://' . getenv('CIVICRM_DB_USER') . ':' . getenv('CIVICRM_DB_PASS') . '@' . getenv('CIVICRM_DB_HOST') . '/' . getenv('CIVICRM_DB_NAME') . '?new_link=true');
-define('CIVICRM_UF_DSN', 'mysql://' . getenv('DRUPAL_DB_USER') . ':' . getenv('DRUPAL_DB_PASS') . '@' . getenv('DRUPAL_DB_HOST') . '/' . getenv('DRUPAL_DB_NAME') . '?new_link=true');
+define('CIVICRM_DSN', 'mysql://' .
+  getenv('CIVICRM_DB_USER') . ':' .
+  getenv('CIVICRM_DB_PASS') . '@' .
+  getenv('CIVICRM_DB_HOST') . '/' .
+  getenv('CIVICRM_DB_NAME') .
+  '?new_link=true');
+
+define('CIVICRM_UF_DSN', 'mysql://' .
+  getenv('DRUPAL_DB_USER') . ':' .
+  getenv('DRUPAL_DB_PASS') . '@' .
+  getenv('DRUPAL_DB_HOST') . '/' .
+  getenv('DRUPAL_DB_NAME') .
+  '?new_link=true');
+
 define('CIVICRM_UF_BASEURL', getenv('BASE_URL'));
 define('CIVICRM_SITE_KEY', getenv('CIVICRM_SITE_KEY'));
 
