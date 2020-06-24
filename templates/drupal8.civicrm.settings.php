@@ -1,9 +1,9 @@
 <?php
 global $civicrm_root, $civicrm_setting, $civicrm_paths;
 
-$cms_root = '/var/www/html/web';
+$cms_root = '/var/www/html';
 $civicrm_files = "$cms_root/sites/default/files";
-$civicrm_root = '/var/www/html/vendor/civicrm/civicrm-core/';
+$civicrm_root = '/home/civicrm/src/vendor/civicrm/civicrm-core/';
 $civicrm_paths['cms.root'] = ['path' => $cms_root];
 $civicrm_paths['civicrm.files'] = ['path' => $civicrm_files];
 
@@ -76,5 +76,5 @@ switch ($memLimitUnit) {
 if ($memLimit >= 0 and $memLimit < 134217728) {
   ini_set('memory_limit', '128M');
 }
-require_once 'CRM/Core/ClassLoader.php';
+require_once $civicrm_root . 'CRM/Core/ClassLoader.php';
 CRM_Core_ClassLoader::singleton()->register();

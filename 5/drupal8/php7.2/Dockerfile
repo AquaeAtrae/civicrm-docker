@@ -133,8 +133,6 @@ ENV PATH="/home/civicrm/.composer/vendor/bin:${PATH}"
 
 RUN cgr drush/drush:~8
 
-RUN mkdir -p /var/www/html/web/sites/default/files
-
 USER root
 
 COPY ./civicrm-docker-entrypoint ./civicrm-docker-init ./civicrm-docker-dump ./civicrm-docker-install /usr/local/bin/
@@ -146,3 +144,6 @@ RUN chmod +x /usr/local/bin/civicrm-docker-entrypoint && \
 
 COPY --chown=civicrm:civicrm ./settings.php /usr/local/etc/civicrm
 COPY --chown=civicrm:civicrm ./civicrm.settings.php /usr/local/etc/civicrm
+
+RUN mkdir /var/www/vendor && \
+   echo "<?php return require '/home/civicrm/src/vendor/autoload.php';" > /var/www/vendor/autoload.php
