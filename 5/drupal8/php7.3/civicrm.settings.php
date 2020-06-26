@@ -3,9 +3,27 @@ global $civicrm_root, $civicrm_setting, $civicrm_paths;
 
 $cms_root = '/var/www/html';
 $civicrm_files = "$cms_root/sites/default/files";
+$civicrm_packages = "$cms_root/libraries/civicrm/packages";
 $civicrm_root = '/home/civicrm/src/vendor/civicrm/civicrm-core/';
-$civicrm_paths['cms.root'] = ['path' => $cms_root];
-$civicrm_paths['civicrm.files'] = ['path' => $civicrm_files];
+
+$url_root = getenv('BASE_URL');
+$url_files = "$url_root/sites/default/files";
+$url_civicrm_root = "$url_root/libraries/civicrm";
+$url_packages = "$url_civicrm_root/packages";
+
+$civicrm_paths['cms.root'] = [
+  'path' => $cms_root,
+  'url' => $url_root,
+];
+
+$civicrm_paths['civicrm.files'] = [
+  'path' => $civicrm_files,
+  'url' => $url_files,
+];
+
+$civicrm_paths['civicrm.root'] = [
+  'url' => $url_civicrm_root,
+];
 
 // CMS specific stuff
 define('CIVICRM_UF', 'Drupal8');
