@@ -72,6 +72,10 @@ for combo in combos.values():
     docker_file = templates.get_template("Dockerfile")
     docker_file.stream(**combo["variables"]).dump(f"{combo_dir}/Dockerfile")
 
+    # apache.conf
+    docker_file = templates.get_template("apache.conf")
+    docker_file.stream(**combo["variables"]).dump(f"{combo_dir}/apache.conf")
+
     # civicrm.settings.php
     run(
         [
@@ -131,7 +135,6 @@ for combo in combos.values():
     run(
         [
             "cp",
-            "templates/apache.conf",
             "templates/civicrm_dump.php",
             "templates/civicrm-docker-entrypoint",
             combo_dir,
