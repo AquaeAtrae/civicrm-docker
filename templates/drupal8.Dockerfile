@@ -17,6 +17,3 @@ RUN chmod +x /usr/local/bin/civicrm-docker-entrypoint && \
 
 COPY --chown=civicrm:civicrm ./settings.php /usr/local/etc/civicrm
 COPY --chown=civicrm:civicrm ./civicrm.settings.php /usr/local/etc/civicrm
-
-RUN mkdir /var/www/vendor && \
-   echo "<?php return require '/home/civicrm/src/vendor/autoload.php';" > /var/www/vendor/autoload.php

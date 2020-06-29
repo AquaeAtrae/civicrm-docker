@@ -24,7 +24,7 @@ $state = [
         'drupal' 
     ],
     'directories' => [
-        'files' => '/var/www/html/sites/default/files'
+        'files' => '/var/www/html/web/sites/default/files'
     ]
 ];
 
