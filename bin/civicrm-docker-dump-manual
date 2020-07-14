@@ -4,6 +4,85 @@
 // Initialise variables
 $pwd = $_SERVER['PWD'];
 $projectName = basename($pwd);
+
+// Read arguments (if any)
+$shortopts = "c:s:h";
+$longopts = [
+    "config-file:",
+    "state-path:",
+    "help"
+];
+
+$options = getopt($shortopts, $longopts);
+
+// Show the help
+if (isset($options["h"]) || isset($options["help"])) {
+  echo "
+# Usage
+
+## Default
+
+Executing `civicrm-docker-dump-manual` without parameters
+will 1) read `civicrm-docker-dump-manual.json` from the
+current working directory and 2) generate a dump in the
+`state` folder, also relative to the current working directory.
+
+## Help
+
+Executing the script with `-h` or `--help` will show this help:
+
+```
+civicrm-docker-dump-manual -h
+civicrm-docker-dump-manual --help
+```
+
+## Config
+
+Executing the script with `-c` or `--config-file` will allow
+to specify a different configuration file:
+
+```
+civicrm-docker-dump-manual -c /project/civicrm-docker-dump-manual.json
+```
+
+## State
+
+Executing the script with `-s` or `--state-path` will allow
+to specify a different configuration file:
+
+```
+civicrm-docker-dump-manual -s /project/state
+```
+
+Please, don't add a trailing slash at the end.
+
+";
+
+  exit;
+}
+
+// Choose the definitions file
+if (isset($options["c"]) && empty($options["config-file"])) {
+  $options["config-file"] = $options["c"];
+}
+
+if (isset($options["config-file"])) {
+  $definitionFile = $options["config-file"];
+} else {
+  $definitionFile = "$pwd/civicrm-docker-dump-manual.json";
+}
+
+// Choose the state folder
+if (isset($options["s"]) && empty($options["state-path"])) {
+  $options["state-path"] = $options["s"];
+}
+
+if (isset($options["state-path"])) {
+  $statePath = $options["state-path"];
+} else {
+  $statePath = "$pwd/state";
+}
+
 // Warn if we do not have a valid project name
 if (!strlen($projectName)) {
     trigger_error("Could not detect project name", E_USER_WARNING);
@@ -12,7 +91,6 @@ $tempDir = "/tmp/civicrm-docker-dump.$projectName";
 $dumpScript = "/tmp/civicrm-docker-dump.$projectName.sync.sh";
 
 // Load definition from json
-$definitionFile = "$pwd/civicrm-docker-dump-manual.json";
 $definition = json_decode(file_get_contents($definitionFile), 1);
 
 
@@ -47,7 +125,7 @@ $state = [
 $lines[] = json_encode($state, JSON_PRETTY_PRINT);
 $lines[] = "EOF";
 $lines[] = "OUTFILE={$projectName}.$(date +%Y%m%dT%H%M%S).tar.gz";
-$lines[] = "tar -cz -C {$tempDir} . -f {$pwd}/state/\${OUTFILE}";
+$lines[] = "tar -cz -C {$tempDir} . -f ${statePath}/\${OUTFILE}";
 $lines[] = "echo \$OUTFILE";
 $lines[] = "rm -rf {$tempDir}";
 
