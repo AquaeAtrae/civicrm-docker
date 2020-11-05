@@ -1,0 +1,154 @@
+#!/bin/env php
+<?php
+
+/**
+ * Usage:
+ *
+ * > civicrm-docker-autoupdate [civicrm|civicrm-extensions|cms|cms-addons]
+ *  
+ * @examples:
+ * 
+ * # Update CiviCRM and CMS
+ * > civicrm-docker-autoupdate civicrm cms
+ * 
+ * # Update only the CMS
+ * > civicrm-docker-autoupdate cms
+ */
+
+$systems = ['civicrm', 'civicrm-extensions', 'cms', 'cms-addons'];
+$versions = [
+    'civicrm' => null,
+    'civicrm-extensions' => null,
+    'cms' => null,
+    'cms-addons' => null,
+];
+
+class AutoUpdate {
+    public function getLatest(string $system)
+    {
+        switch($system) {
+            case 'civicrm':
+                if (!$versions['civicrm']) {
+                    $versions['civicrm'] = file_get_contents('https://latest.civicrm.org/stable.php');
+                }
+                return $versions['civicrm'];
+            case 'civicrm-extensions':
+                if (!$versions['civicrm-extensions']) {
+                    $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
+                    $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
+                    $mapper = \CRM_Extension_System::singleton()->getMapper();
+    
+                    $installed = array_filter($extensions, function($extension) use($statuses) {
+                        return isset($statuses[$extension->key]) && $statuses[$extension->key] === 'installed';
+                    });
+    
+                    $versions['civicrm-extensions'] = array_map(
+                        function($extension) { return $extension->version; },
+                        $installed
+                    );    
+                }
+
+                return $versions['civicrm-extensions'];
+            case "cms":
+                // TODO
+                break;
+            case "cms-addons":
+                // TODO
+                break;
+        }
+    }
+
+    public function getCurrent(string $system)
+    {
+        switch($system) {
+            case 'civicrm':
+                // TODO
+            case 'civicrm-extensions':
+                // TODO
+            case "cms":
+                // TODO
+                break;
+            case "cms-addons":
+                // TODO
+                break;
+        }
+    }
+
+    public function getLinkToLatest(string $system)
+    {
+        switch($system) {
+            case "civicrm":
+                $latest = self::getLatest("civicrm");
+                break;
+            case "civicrm-extensions":
+                $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
+                $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
+                $mapper = \CRM_Extension_System::singleton()->getMapper();
+
+                $installed = array_filter($extensions, function($extension) use($statuses) {
+                    return isset($statuses[$extension->key]) && $statuses[$extension->key] === 'installed';
+                });
+
+                $links = array_map(
+                    function($extension) { return $extension->downloadUrl; },
+                    $installed
+                );
+
+                return $links;
+            case "cms":
+                // TODO
+                break;
+            case "cms-addons":
+                // TODO
+                break;
+        }
+    }
+
+    public function getPath(string $system)
+    {
+        switch($system) {
+            case 'civicrm':
+                return system("cv path -d '[civicrm.root]'");
+            case 'civicrm-extensions':
+                $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
+                $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
+                $mapper = \CRM_Extension_System::singleton()->getMapper();
+
+                $installed = array_filter($extensions, function($extension) use($statuses) {
+                    return $statuses[$extension->key] === 'installed';
+                });
+
+                $paths = array_map(
+                    function($extension) use($mapper) {
+                        return $mapper->keyToBasePath($extension->key);
+                    },
+                    $installed
+                );
+
+                return $paths;
+            case "cms":
+                // TODO
+                break;
+            case "cms-addons":
+                // TODO
+                break;
+        }
+    }
+}
+
+$updater = new AutoUpdate();
+
+foreach($argv as $system) {
+    if (!in_array($system, $systems)) {
+        echo "Ignored unknown system $system\n";
+        echo "The only known ones are: " . join(', ', $systems);
+        continue;
+    }
+
+    echo "Updating $system";
+    echo "- Path: " . json_encode($updater->getPath($system), JSON_PRETTY_PRINT);
+    echo "- Current version: " . json_encode($updater->getCurrent($system), JSON_PRETTY_PRINT);
+    echo "- Latest version: " . json_encode($updater->getLatest($system), JSON_PRETTY_PRINT);
+    echo "- Download link: " . json_encode($updater->getLinkToLatest($system), JSON_PRETTY_PRINT);
+    // TODO: update $system
+}
