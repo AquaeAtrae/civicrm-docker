@@ -1,4 +1,4 @@
-#!/bin/env cv scr
+#!/usr/bin/env php
 <?php
 
 /**
@@ -15,62 +15,94 @@
  * > civicrm-docker-autoupdate cms
  */
 
-const KNOWN_SYSTEMS = ['civicrm', 'civicrm-extensions', 'cms', 'cms-addons'];
+eval(shell_exec('cv php:boot'));
 
-if (!isset($argv)) {
-    $systems = KNOWN_SYSTEMS;
-} else {
-    $systems = array_intersect(
-        KNOWN_SYSTEMS,
-        array_slice($argv, 1)
-    );
-}
+const KNOWN_SYSTEMS = ['civicrm', 'civicrm-extensions', 'cms', 'cms-addons'];
 
 class AutoUpdate {
     private $config;
     private $cms;
     private $versions;
+    private $history;
+    private $installed;
 
     public function __construct(array $systems)
     {
-        $this->config = CRM_Core_Config::singleton();
+        $this->reboot();
 
+        $this->cms = $this->getCMS();
+
+        foreach ($systems as $system) {
+            $this->versions['current'][$system] = $this->getCurrent($system);
+            $this->versions['latest'][$system] = $this->getLatest($system);
+        }
+    }
+
+    public function reboot()
+    {
+        $this->config = CRM_Core_Config::singleton();
+        $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
+        $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
+
+        $this->installed = [
+            'extensions' => array_filter($extensions,
+                function($extension) use($statuses) {
+                    return isset($statuses[$extension->key]) &&
+                        $statuses[$extension->key] === 'installed';
+                }
+            ),
+            // This is only getting the names of the modules
+            // TODO Get versions and paths where they are
+            'addons' => CRM_Core_Module::collectStatuses(
+                $this->config->userSystem->getModules()
+            ),
+        ];
+
+        $this->cms = null;
         $this->versions = [
             'current' => [],
             'latest' => [],
         ];
-
-        foreach ($systems as $system) {
-            $this->versions['current'] = $this->getCurrent($system);
-            $this->versions['latest'] = $this->getLatest($system);
-        }
-
-        $this->cms = $this->getCMS();
+        $this->history = [];
     }
 
     public function getCMS()
     {
-        return strtolower(getenv('CIVICRM_UF'));
+        if (!isset($this->cms)) {
+            $this->cms = strtolower(getenv('CIVICRM_UF'));
+        }
+        return $this->cms;
+    }
+
+    public function getHistory(string $system)
+    {
+        if (!isset($this->history[$system])) {
+            $this->history[$system] =
+                shell_exec('git log --pretty=format:"%h%x09%an%x09%ad%x09%s" --follow -- ' .
+                $this->getPath($system)
+            );
+        }
+        return $this->history[$system];
     }
     
     public function getLatest(string $system)
     {
         switch($system) {
             case 'civicrm':
-                return file_get_contents('https://latest.civicrm.org/stable.php');
+                if (!isset($this->versions['latest'][$system])) {
+                    $this->versions['latest'][$system] =
+                        file_get_contents('https://latest.civicrm.org/stable.php');
+                }
+                break;
             case 'civicrm-extensions':
-                $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
-                $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
-                $mapper = \CRM_Extension_System::singleton()->getMapper();
-
-                $installed = array_filter($extensions, function($extension) use($statuses) {
-                    return isset($statuses[$extension->key]) && $statuses[$extension->key] === 'installed';
-                });
-
-                return array_map(
-                    function($extension) { return $extension->version; },
-                    $installed
-                );
+                if (!isset($this->versions['latest'][$system])) {
+                    $this->versions['latest'][$system] =
+                        array_map(
+                            function($extension) { return $extension->version; },
+                            $this->installed['extensions']
+                        );
+                }
+                break;
             case "cms":
                 // TODO
                 break;
@@ -78,23 +110,30 @@ class AutoUpdate {
                 // TODO
                 break;
         }
+        return $this->versions['latest'][$system];
     }
 
     public function getCurrent(string $system)
     {
         switch($system) {
             case 'civicrm':
-                // TODO
+                if (!isset($this->versions['current'][$system])) {
+                    $this->versions['current'][$system] = CRM_Utils_System::version();
+                }
                 break;
             case 'civicrm-extensions':
                 // TODO
                 break;
             case "cms":
-                return $this->config->userSystem->getVersion();
+                if (!isset($this->versions['current'][$system])) {
+                    $this->versions['current'][$system] = $this->config->userSystem->getVersion();
+                }
+                break;
             case "cms-addons":
                 // TODO
                 break;
         }
+        return $this->versions['current'][$system];
     }
 
     public function getLinkToLatest(string $system)
@@ -105,17 +144,9 @@ class AutoUpdate {
                 $cms = $this->cms;
                 return "https://download.civicrm.org/civicrm-$latest-$cms.tar.gz";
             case "civicrm-extensions":
-                $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
-                $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
-                $mapper = \CRM_Extension_System::singleton()->getMapper();
-
-                $installed = array_filter($extensions, function($extension) use($statuses) {
-                    return isset($statuses[$extension->key]) && $statuses[$extension->key] === 'installed';
-                });
-
                 $links = array_map(
                     function($extension) { return $extension->downloadUrl; },
-                    $installed
+                    $this->installed['extensions']
                 );
 
                 return $links;
@@ -132,24 +163,15 @@ class AutoUpdate {
     {
         switch($system) {
             case 'civicrm':
-                return system("cv path -d '[civicrm.root]'");
+                return shell_exec("cv path -d '[civicrm.root]'");
             case 'civicrm-extensions':
-                $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
-                $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
-                $mapper = \CRM_Extension_System::singleton()->getMapper();
-
-                $installed = array_filter($extensions, function($extension) use($statuses) {
-                    return $statuses[$extension->key] === 'installed';
-                });
-
-                $paths = array_map(
-                    function($extension) use($mapper) {
+                return array_map(
+                    function($extension) {
+                        $mapper = \CRM_Extension_System::singleton()->getMapper();
                         return $mapper->keyToBasePath($extension->key);
                     },
-                    $installed
+                    $this->installed['extensions']
                 );
-
-                return $paths;
             case "cms":
                 // TODO
                 break;
@@ -160,13 +182,45 @@ class AutoUpdate {
     }
 }
 
+function asString($input)
+{
+    if (gettype($input) === "string") {
+        return "- $input";
+    }
+
+    $string = '';
+    foreach ($input as $key => $value) {
+        $string .= "- $key: $value\n";
+    }
+
+    return $string;
+}
+
+if (!isset($argv)) {
+    $systems = KNOWN_SYSTEMS;
+} else {
+    $systems = array_intersect(
+        KNOWN_SYSTEMS,
+        array_slice($argv, 1)
+    );
+}
+
 $updater = new AutoUpdate($systems);
 
 foreach($systems as $system) {
-    echo "Updating $system\n";
-    echo "- Path: " . json_encode($updater->getPath($system), JSON_PRETTY_PRINT) . "\n";
-    echo "- Current version: " . json_encode($updater->getCurrent($system), JSON_PRETTY_PRINT) . "\n";
-    echo "- Latest version: " . json_encode($updater->getLatest($system), JSON_PRETTY_PRINT) . "\n";
-    echo "- Download link: " . json_encode($updater->getLinkToLatest($system), JSON_PRETTY_PRINT) . "\n";
+    echo "# " . strtoupper($system) . "\n\n";
+
+    echo "## Current version:\n";
+    echo asString($updater->getCurrent($system)) . "\n\n";
+
+    echo "## Latest version:\n";
+    echo asString($updater->getLatest($system)) . "\n\n";
+
+    echo "## Download link:\n";
+    echo asString($updater->getLinkToLatest($system)) . "\n\n";
+
+    echo "## Path:\n";
+    echo asString($updater->getPath($system)) . "\n\n";
+
     // TODO: update $system
 }
