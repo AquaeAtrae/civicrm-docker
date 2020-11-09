@@ -30,8 +30,6 @@ class AutoUpdate {
     {
         $this->reboot();
 
-        $this->cms = $this->getCMS();
-
         foreach ($systems as $system) {
             $this->versions['current'][$system] = $this->getCurrent($system);
             $this->versions['latest'][$system] = $this->getLatest($system);
@@ -44,6 +42,8 @@ class AutoUpdate {
         $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
         $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
 
+        $this->cms = $this->getCMS();
+
         $this->installed = [
             'extensions' => array_filter($extensions,
                 function($extension) use($statuses) {
@@ -51,14 +51,24 @@ class AutoUpdate {
                         $statuses[$extension->key] === 'installed';
                 }
             ),
-            // This is only getting the names of the modules
-            // TODO Get versions and paths where they are
-            'addons' => CRM_Core_Module::collectStatuses(
-                $this->config->userSystem->getModules()
-            ),
+            'addons' => [],
         ];
 
-        $this->cms = null;
+        if ($this->cms === 'drupal') {
+            $addons = update_get_available();
+            $this->installed['addons'] = $addons;
+            foreach ($addons as $key => $addon) {
+                if (in_array($key, ['civicrm', 'drupal'])) {
+                    unset($this->installed['addons'][$key]);
+                    continue;
+                }
+                $this->installed['addons'][$key]['info'] =
+                    system_get_info('module', $key);
+                $this->installed['addons'][$key]['path'] =
+                    realpath(drupal_get_path('module', $key));
+            }
+        }
+
         $this->versions = [
             'current' => [],
             'latest' => [],
@@ -107,7 +117,13 @@ class AutoUpdate {
                 // TODO
                 break;
             case "cms-addons":
-                // TODO
+                if (!isset($this->versions['latest'][$system])) {
+                    $this->versions['latest'][$system] =
+                        array_map(
+                            function($addon) { return reset($addon['releases'])['version']; },
+                            $this->installed['addons']
+                        );
+                }
                 break;
         }
         return $this->versions['latest'][$system];
@@ -130,7 +146,13 @@ class AutoUpdate {
                 }
                 break;
             case "cms-addons":
-                // TODO
+                if (!isset($this->versions['current'][$system])) {
+                    $this->versions['current'][$system] =
+                        array_map(
+                            function($addon) { return $addon['info']['version']; },
+                            $this->installed['addons']
+                        );
+                }
                 break;
         }
         return $this->versions['current'][$system];
@@ -154,7 +176,13 @@ class AutoUpdate {
                 // TODO
                 break;
             case "cms-addons":
-                // TODO
+                if (!isset($this->versions['latest'][$system])) {
+                    $this->versions['latest'][$system] =
+                        array_map(
+                            function($addon) { return reset($addon['releases'])['download_link']; },
+                            $this->installed['addons']
+                        );
+                }
                 break;
         }
     }
@@ -176,7 +204,10 @@ class AutoUpdate {
                 // TODO
                 break;
             case "cms-addons":
-                // TODO
+                return array_map(
+                    function($addon) { return $addon['path']; },
+                    $this->installed['addons']
+                );
                 break;
         }
     }
