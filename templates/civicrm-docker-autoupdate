@@ -51,6 +51,7 @@ class AutoUpdate {
                         $statuses[$extension->key] === 'installed';
                 }
             ),
+            // This will be set below in function of the cms
             'addons' => [],
         ];
 
@@ -138,7 +139,18 @@ class AutoUpdate {
                 }
                 break;
             case 'civicrm-extensions':
-                // TODO
+                if (!isset($this->versions['current'][$system])) {
+                    $this->versions['current'][$system] =
+                        array_map(
+                            function($extension) use($system) {
+                                $paths = $this->getPath($system);
+                                $path = $paths[$extension->key];
+                                $info = CRM_Extension_Info::loadFromFile($path . '/info.xml');
+                                return $info->version;
+                            },
+                            $this->installed['extensions']
+                        );
+                }
                 break;
             case "cms":
                 if (!isset($this->versions['current'][$system])) {
@@ -227,7 +239,7 @@ function asString($input)
     return $string;
 }
 
-if (!isset($argv)) {
+if (!count(array_slice($argv, 1))) {
     $systems = KNOWN_SYSTEMS;
 } else {
     $systems = array_intersect(
