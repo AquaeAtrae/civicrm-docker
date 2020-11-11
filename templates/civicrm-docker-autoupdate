@@ -21,207 +21,340 @@ const KNOWN_SYSTEMS = ['civicrm', 'civicrm-extensions', 'cms', 'cms-addons'];
 
 class AutoUpdate {
     private $config;
-    private $cms;
-    private $versions;
-    private $history;
-    private $installed;
+    private $systems;
 
     public function __construct(array $systems)
     {
-        $this->reboot();
-
-        foreach ($systems as $system) {
-            $this->versions['current'][$system] = $this->getCurrent($system);
-            $this->versions['latest'][$system] = $this->getLatest($system);
-        }
+        $this->config = CRM_Core_Config::singleton();
+        $this->systems = array_intersect(
+            KNOWN_SYSTEMS,
+            array_slice($systems, 1)
+        );
     }
 
-    public function reboot()
+    public function clear()
     {
-        $this->config = CRM_Core_Config::singleton();
-        $extensions = \CRM_Extension_System::singleton()->getBrowser()->getExtensions();
-        $statuses = \CRM_Extension_System::singleton()->getManager()->getStatuses();
+        unset($this->civicrm);
+        unset($this->cms);
+        unset($this->extensions);
+        unset($this->addons);
+    }
 
-        $this->cms = $this->getCMS();
+    public function getAll()
+    {
+        $this->getCiviCRMExtensions();
+        $this->getCMSAddons();
 
-        $this->installed = [
-            'extensions' => array_filter($extensions,
-                function($extension) use($statuses) {
-                    return isset($statuses[$extension->key]) &&
-                        $statuses[$extension->key] === 'installed';
-                }
-            ),
-            // This will be set below in function of the cms
-            'addons' => [],
-        ];
-
-        if ($this->cms === 'drupal') {
-            $addons = update_get_available();
-            $this->installed['addons'] = $addons;
-            foreach ($addons as $key => $addon) {
-                if (in_array($key, ['civicrm', 'drupal'])) {
-                    unset($this->installed['addons'][$key]);
-                    continue;
-                }
-                $this->installed['addons'][$key]['info'] =
-                    system_get_info('module', $key);
-                $this->installed['addons'][$key]['path'] =
-                    realpath(drupal_get_path('module', $key));
-            }
+        foreach ($this->systems as $system) {
+            $this->getCurrent($system);
+            $this->getLatest($system);
+            $this->getDownloadLink($system);
+            // $this->getHistory($system);
         }
-
-        $this->versions = [
-            'current' => [],
-            'latest' => [],
-        ];
-        $this->history = [];
     }
 
     public function getCMS()
     {
-        if (!isset($this->cms)) {
-            $this->cms = strtolower(getenv('CIVICRM_UF'));
+        if (!isset($this->cms['name'])) {
+            $cms = strtolower(getenv('CIVICRM_UF'));
+            $this->cms['name'] = $cms;
+            $this->$cms = &$this->cms;
         }
-        return $this->cms;
+
+        return $this->cms['name'];
+    }
+
+    public function getCiviCRMExtensions()
+    {
+        if (!isset($this->extensions)) {
+            $extensions = CRM_Extension_System::singleton()->getBrowser()->getExtensions();
+            $statuses = CRM_Extension_System::singleton()->getManager()->getStatuses();
+            $this->extensions = array_filter($extensions,
+                function($extension) use($statuses) {
+                    return isset($statuses[$extension->key]) &&
+                        $statuses[$extension->key] === 'installed';
+                }
+            );    
+        }
+        return $this->extensions;
+    }
+
+    public function getCMSAddons()
+    {
+        // TODO: WordPress && Drupal-8
+        if ($this->getCMS() === 'drupal')
+        {
+            return $this->getDrupalModules();
+        }
+    }
+
+    public function getDrupalModules()
+    {
+        if (!isset($this->addons)) {
+            if ($this->getCMS() === 'drupal') {
+                $addons = update_get_available();
+                foreach ($addons as $key => $addon) {
+                    if (in_array($key, ['civicrm', 'drupal'])) {
+                        unset($addons[$key]);
+                        continue;
+                    }
+                    $addons[$key]['info'] = system_get_info('module', $key);
+                    $addons[$key]['path'] = realpath(drupal_get_path('module', $key));
+                }
+            }
+    
+            $this->addons = $addons;
+        }
+
+        return $this->addons;
     }
 
     public function getHistory(string $system)
     {
         if (!isset($this->history[$system])) {
-            $this->history[$system] =
-                shell_exec('git log --pretty=format:"%h%x09%an%x09%ad%x09%s" --follow -- ' .
-                $this->getPath($system)
-            );
+            try {
+                $this->history[$system] =
+                    shell_exec(
+                        'git log --pretty=format:"%h%x09%an%x09%ad%x09%s" --follow -- ' .
+                        $this->getPath($system)
+                    );
+            } catch(Exception $e) {}
         }
+
         return $this->history[$system];
     }
     
     public function getLatest(string $system)
     {
-        switch($system) {
-            case 'civicrm':
-                if (!isset($this->versions['latest'][$system])) {
-                    $this->versions['latest'][$system] =
-                        file_get_contents('https://latest.civicrm.org/stable.php');
-                }
-                break;
-            case 'civicrm-extensions':
-                if (!isset($this->versions['latest'][$system])) {
-                    $this->versions['latest'][$system] =
-                        array_map(
-                            function($extension) { return $extension->version; },
-                            $this->installed['extensions']
-                        );
-                }
-                break;
-            case "cms":
-                // TODO
-                break;
-            case "cms-addons":
-                if (!isset($this->versions['latest'][$system])) {
-                    $this->versions['latest'][$system] =
-                        array_map(
-                            function($addon) { return reset($addon['releases'])['version']; },
-                            $this->installed['addons']
-                        );
-                }
-                break;
+        if ($system === 'civicrm') {
+            if (!isset($this->civicrm['latest'])) {
+                $this->civicrm['latest'] = file_get_contents('https://latest.civicrm.org/stable.php');
+            }
+            
+            return $this->civicrm['latest'];
         }
-        return $this->versions['latest'][$system];
+
+        if ($system === 'civicrm-extensions') {
+            foreach ($this->extensions as $key => $extension) {
+                if (!isset($this->extensions[$key]->latest)) {
+                    $this->extensions[$key]->latest = $extension->version;
+                }
+            }
+
+            return array_map(
+                function($extension) { return $extension->latest; },
+                $this->extensions
+            );
+        }
+
+        if ($system === 'cms') {
+            if (!isset($this->cms['current'])) {
+                $this->cms['current'] = $this->config->userSystem->getVersion();
+            }
+
+            return $this->cms['current'];
+        }
+
+        if ($system === 'cms-addons') {
+            foreach ($this->addons as $key => $addon) {
+                if (!isset($this->addons[$key]['latest'])) {
+                    $this->addons[$key]['latest'] = $addon['releases']['version'];
+                }
+            }
+
+            return array_map(
+                function($addon) { return $addon['latest']; },
+                $this->addons
+            );
+        }
     }
 
     public function getCurrent(string $system)
     {
-        switch($system) {
-            case 'civicrm':
-                if (!isset($this->versions['current'][$system])) {
-                    $this->versions['current'][$system] = CRM_Utils_System::version();
-                }
-                break;
-            case 'civicrm-extensions':
-                if (!isset($this->versions['current'][$system])) {
-                    $this->versions['current'][$system] =
-                        array_map(
-                            function($extension) use($system) {
-                                $paths = $this->getPath($system);
-                                $path = $paths[$extension->key];
-                                $info = CRM_Extension_Info::loadFromFile($path . '/info.xml');
-                                return $info->version;
-                            },
-                            $this->installed['extensions']
-                        );
-                }
-                break;
-            case "cms":
-                if (!isset($this->versions['current'][$system])) {
-                    $this->versions['current'][$system] = $this->config->userSystem->getVersion();
-                }
-                break;
-            case "cms-addons":
-                if (!isset($this->versions['current'][$system])) {
-                    $this->versions['current'][$system] =
-                        array_map(
-                            function($addon) { return $addon['info']['version']; },
-                            $this->installed['addons']
-                        );
-                }
-                break;
+        if ($system === 'civicrm') {
+            if (!isset($this->civicrm['current'])) {
+                $this->civicrm['current'] = CRM_Utils_System::version();
+            }
+
+            return $this->civicrm['current'];
         }
-        return $this->versions['current'][$system];
+
+        if ($system === 'civicrm-extensions') {
+            foreach ($this->extensions as $key => $extension) {
+                if (!isset($this->extensions[$key]->current)) {
+                    $path = $this->getPath($system)[$key]['path'];
+                    try {
+                        $info = CRM_Extension_Info::loadFromFile($path . '/info.xml');
+                    } catch(Exception $e) {
+                        continue;
+                    }
+                    $this->extensions[$key]->current = $info->version;
+                }    
+            }
+
+            return array_map(
+                function($extension) { return $extension->current; },
+                $this->extensions
+            );
+        }
+
+        if ($system === 'cms') {
+            if (!isset($this->cms['current'])) {
+                $this->cms['current'] = $this->config->userSystem->getVersion();
+            }
+
+            return $this->cms['current'];
+        }
+
+        if ($system === 'cms-addons') {
+            foreach ($this->addons as $key => $addon) {
+                if (!isset($this->addons[$key]['current'])) {
+                    $this->addons[$key]['current'] = $addon['info']['version'];
+                }
+            }
+
+            return array_map(
+                function($addon) { return $addon['current']; },
+                $this->addons
+            );
+        }
     }
 
-    public function getLinkToLatest(string $system)
+    public function getDownloadLink(string $system)
     {
-        switch($system) {
-            case "civicrm":
+        if ($system === 'civicrm') {
+            if (!isset($this->civicrm['download_link'])) {
                 $latest = self::getLatest("civicrm");
-                $cms = $this->cms;
-                return "https://download.civicrm.org/civicrm-$latest-$cms.tar.gz";
-            case "civicrm-extensions":
-                $links = array_map(
-                    function($extension) { return $extension->downloadUrl; },
-                    $this->installed['extensions']
-                );
+                $cms = $this->cms['name'];
+                $this->civicrm['download_link'] = "https://download.civicrm.org/civicrm-$latest-$cms.tar.gz";
+            }
 
-                return $links;
-            case "cms":
-                // TODO
-                break;
-            case "cms-addons":
-                if (!isset($this->versions['latest'][$system])) {
-                    $this->versions['latest'][$system] =
-                        array_map(
-                            function($addon) { return reset($addon['releases'])['download_link']; },
-                            $this->installed['addons']
-                        );
+            return $this->civicrm['download_link'];
+        }
+
+        if ($system === 'civicrm-extensions') {
+            foreach ($this->extensions as $key => $extension) {
+                if (!isset($this->extensions[$key]->download_link)) {
+                    $this->extensions[$key]->download_link = $extension->downloadUrl;
+                }    
+            }
+
+            return array_map(
+                function($extension) { return $extension->download_link; },
+                $this->extensions
+            );
+        }
+
+        if ($system === 'cms') {
+            if (!isset($this->cms['download_link'])) {
+                // TODO: get download for the latest Drupal release
+                // $this->cms['download_link'] = ;
+            }
+
+            return $this->cms['download_link'];
+        }
+
+        if ($system === 'cms-addons') {
+            foreach ($this->addons as $key => $addon) {
+                if (!isset($this->addons[$key]['download_link'])) {
+                    $this->addons[$key]['download_link'] = reset($addon['releases'])['download_link'];
                 }
-                break;
+            }
+
+            return array_map(
+                function($addon) { return $addon['download_link']; },
+                $this->addons
+            );
         }
     }
 
     public function getPath(string $system)
     {
-        switch($system) {
-            case 'civicrm':
-                return shell_exec("cv path -d '[civicrm.root]'");
-            case 'civicrm-extensions':
-                return array_map(
-                    function($extension) {
-                        $mapper = \CRM_Extension_System::singleton()->getMapper();
-                        return $mapper->keyToBasePath($extension->key);
-                    },
-                    $this->installed['extensions']
-                );
-            case "cms":
-                // TODO
-                break;
-            case "cms-addons":
-                return array_map(
-                    function($addon) { return $addon['path']; },
-                    $this->installed['addons']
-                );
-                break;
+        if ($system === 'civicrm') {
+            if (!isset($this->civicrm['full_path'])) {
+                $this->civicrm['full_path'] = shell_exec("cv path -d '[civicrm.root]'");
+            }
+
+            return $this->civicrm['full_path'];
         }
+
+        if ($system === 'civicrm-extensions') {
+            foreach ($this->extensions as $key => $extension) {
+                if (!isset($this->extensions[$key]->full_path)) {
+                    $mapper = \CRM_Extension_System::singleton()->getMapper();
+                    $this->extensions[$key]->full_path = $mapper->keyToBasePath($extension->key);
+                }    
+            }
+
+            return array_map(
+                function($extension) { return $extension->full_path; },
+                $this->extensions
+            );
+        }
+
+        if ($system === 'cms') {
+            if (!isset($this->cms['full_path'])) {
+                // TODO: read the CMS path
+                $this->cms['full_path'] = '';
+            }
+
+            return $this->cms['full_path'];
+        }
+
+        if ($system === 'cms-addons') {
+            foreach ($this->addons as $key => $addon) {
+                if (!isset($this->addons[$key]['full_path'])) {
+                    $this->addons[$key]['full_path'] = $addon['path'];
+                }
+            }
+
+            return array_map(
+                function($addon) { return $addon['full_path']; },
+                $this->addons
+            );
+        }
+    }
+
+    public function toArray()
+    {
+        $array = [
+            'civicrm' => $this->civicrm,
+            'civicrm-extensions' => array_map(
+                function($extension) {
+                    return [
+                        'current' => $extension->current,
+                        'latest' => $extension->latest,
+                        'download_link' => $extension->download_link,
+                        'path' => $extension->full_path,
+                    ];
+                },
+                $this->extensions
+            ),
+            'cms' => $this->cms,
+            'cms-addons' => array_map(
+                function($addon) {
+                    return [
+                        'current' => $addon['current'],
+                        'latest' => $addon['latest'],
+                        'download_link' => $addon['download_link'],
+                        'path' => $addon['full_path'],
+                    ];
+                },
+                $this->addons
+            ),
+        ];
+
+        return $array;
+    }
+
+    public function toJson()
+    {
+        return json_encode($this->toArray(), JSON_PRETTY_PRINT);
+    }
+
+    public function __toString()
+    {
+        return $this->toJson();
     }
 }
 
@@ -249,21 +382,4 @@ if (!count(array_slice($argv, 1))) {
 }
 
 $updater = new AutoUpdate($systems);
-
-foreach($systems as $system) {
-    echo "# " . strtoupper($system) . "\n\n";
-
-    echo "## Current version:\n";
-    echo asString($updater->getCurrent($system)) . "\n\n";
-
-    echo "## Latest version:\n";
-    echo asString($updater->getLatest($system)) . "\n\n";
-
-    echo "## Download link:\n";
-    echo asString($updater->getLinkToLatest($system)) . "\n\n";
-
-    echo "## Path:\n";
-    echo asString($updater->getPath($system)) . "\n\n";
-
-    // TODO: update $system
-}
+$updater->getAll();
