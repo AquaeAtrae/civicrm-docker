@@ -19,6 +19,10 @@ eval(shell_exec('cv php:boot'));
 
 const KNOWN_SYSTEMS = ['civicrm', 'civicrm-extensions', 'cms', 'cms-addons'];
 
+if (!defined('DRUPAL_ROOT')) {
+    define('DRUPAL_ROOT', getcwd());
+}
+
 class AutoUpdate {
     private $config;
     private $systems;
@@ -26,10 +30,13 @@ class AutoUpdate {
     public function __construct(array $systems)
     {
         $this->config = CRM_Core_Config::singleton();
-        $this->systems = array_intersect(
-            KNOWN_SYSTEMS,
-            array_slice($systems, 1)
-        );
+
+        $this->systems = [];
+        foreach(KNOWN_SYSTEMS as $system) {
+            if (in_array($system, $systems)) {
+                $this->systems[] = $system;
+            }
+        }
     }
 
     public function clear()
@@ -42,15 +49,23 @@ class AutoUpdate {
 
     public function getAll()
     {
-        $this->getCiviCRMExtensions();
-        $this->getCMSAddons();
+        if (in_array('civicrm-extensions', $this->systems)) {
+            $this->getCiviCRMExtensions();
+        }
+
+        if (in_array('cms-addons', $this->systems)) {
+            $this->getCMSAddons();
+        }
 
         foreach ($this->systems as $system) {
             $this->getCurrent($system);
             $this->getLatest($system);
             $this->getDownloadLink($system);
+            $this->getPath($system);
             // $this->getHistory($system);
         }
+
+        return $this->toArray();
     }
 
     public function getCMS()
@@ -158,7 +173,7 @@ class AutoUpdate {
         if ($system === 'cms-addons') {
             foreach ($this->addons as $key => $addon) {
                 if (!isset($this->addons[$key]['latest'])) {
-                    $this->addons[$key]['latest'] = $addon['releases']['version'];
+                    $this->addons[$key]['latest'] = reset($addon['releases'])['version'];
                 }
             }
 
@@ -226,7 +241,8 @@ class AutoUpdate {
             if (!isset($this->civicrm['download_link'])) {
                 $latest = self::getLatest("civicrm");
                 $cms = $this->cms['name'];
-                $this->civicrm['download_link'] = "https://download.civicrm.org/civicrm-$latest-$cms.tar.gz";
+                $this->civicrm['download_link'] =
+                    "https://download.civicrm.org/civicrm-$latest-$cms.tar.gz";
             }
 
             return $this->civicrm['download_link'];
@@ -247,8 +263,11 @@ class AutoUpdate {
 
         if ($system === 'cms') {
             if (!isset($this->cms['download_link'])) {
-                // TODO: get download for the latest Drupal release
-                // $this->cms['download_link'] = ;
+                if ($this->getCMS() === 'drupal') {
+                    $drupal = update_get_available()['drupal'];
+                    $releases = $drupal['releases'];
+                    $this->cms['download_link'] = reset($releases)['download_link'];
+                }
             }
 
             return $this->cms['download_link'];
@@ -294,8 +313,9 @@ class AutoUpdate {
 
         if ($system === 'cms') {
             if (!isset($this->cms['full_path'])) {
-                // TODO: read the CMS path
-                $this->cms['full_path'] = '';
+                if ($this->getCMS() === 'drupal') {
+                    $this->cms['full_path'] = DRUPAL_ROOT;
+                }
             }
 
             return $this->cms['full_path'];
@@ -322,7 +342,7 @@ class AutoUpdate {
             'civicrm-extensions' => array_map(
                 function($extension) {
                     return [
-                        'current' => $extension->current,
+                        'current' => $extension->version,
                         'latest' => $extension->latest,
                         'download_link' => $extension->download_link,
                         'path' => $extension->full_path,
@@ -358,20 +378,6 @@ class AutoUpdate {
     }
 }
 
-function asString($input)
-{
-    if (gettype($input) === "string") {
-        return "- $input";
-    }
-
-    $string = '';
-    foreach ($input as $key => $value) {
-        $string .= "- $key: $value\n";
-    }
-
-    return $string;
-}
-
 if (!count(array_slice($argv, 1))) {
     $systems = KNOWN_SYSTEMS;
 } else {
@@ -383,3 +389,4 @@ if (!count(array_slice($argv, 1))) {
 
 $updater = new AutoUpdate($systems);
 $updater->getAll();
+echo (string) $updater;
